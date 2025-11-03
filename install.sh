@@ -50,6 +50,21 @@ log() {
     echo -e "$1"
 }
 
+confirm_step() {
+    local description="$1"
+    if [[ "$non_interactive" = true ]]; then
+        return 0
+    fi
+    while true; do
+        read -p "是否执行${description}? [y/N] " -r < /dev/tty
+        case "$REPLY" in
+            [Yy]) return 0 ;;
+            [Nn]|"") return 1 ;;
+            *) log "${YELLOW}请输入 y 或 n。${NC}" ;;
+        esac
+    done
+}
+
 handle_error() {
     local exit_code=$? line_number=$1
     tput cnorm
@@ -334,6 +349,10 @@ pre_flight_checks() {
 
 install_packages() {
     log "\n${YELLOW}=============== 1. 软件包安装 ===============${NC}"
+    if ! confirm_step "软件包安装"; then
+        log "${YELLOW}[INFO] 已跳过软件包安装${NC}"
+        return
+    fi
     start_spinner "更新软件包列表... "
     DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$LOG_FILE" 2>&1
     stop_spinner
@@ -365,6 +384,10 @@ EOF
 
 configure_hostname() {
     log "\n${YELLOW}=============== 2. 主机名配置 ===============${NC}"
+    if ! confirm_step "主机名配置"; then
+        log "${YELLOW}[INFO] 已跳过主机名配置${NC}"
+        return
+    fi
     local current_hostname=$(hostname)
     log "${BLUE}当前主机名: ${current_hostname}${NC}"
     local final_hostname="$current_hostname"
@@ -407,12 +430,20 @@ configure_hostname() {
 
 configure_timezone() {
     log "\n${YELLOW}=============== 3. 时区配置 ===============${NC}"
+    if ! confirm_step "时区配置"; then
+        log "${YELLOW}[INFO] 已跳过时区配置${NC}"
+        return
+    fi
     timedatectl set-timezone "$TIMEZONE" >> "$LOG_FILE" 2>&1
     log "${GREEN}✅ 时区: ${TIMEZONE}${NC}"
 }
 
 configure_bbr() {
     log "\n${YELLOW}=============== 4. BBR配置 ===============${NC}"
+    if ! confirm_step "BBR配置"; then
+        log "${YELLOW}[INFO] 已跳过BBR配置${NC}"
+        return
+    fi
     local config_file="/etc/sysctl.d/99-bbr.conf"
     if [[ "$BBR_MODE" = "none" ]]; then
         log "${BLUE}[INFO] 跳过BBR配置${NC}"
@@ -459,6 +490,10 @@ EOF
 
 configure_swap() {
     log "\n${YELLOW}=============== 5. Swap配置 ===============${NC}"
+    if ! confirm_step "Swap配置"; then
+        log "${YELLOW}[INFO] 已跳过Swap配置${NC}"
+        return
+    fi
     [[ "$SWAP_SIZE_MB" = "0" ]] && { log "${BLUE}Swap已禁用${NC}"; return; }
     local swap_mb
     if [[ "$SWAP_SIZE_MB" = "auto" ]]; then
@@ -506,6 +541,10 @@ configure_swap() {
 
 configure_dns() {
     log "\n${YELLOW}=============== 6. DNS配置 ===============${NC}"
+    if ! confirm_step "DNS配置"; then
+        log "${YELLOW}[INFO] 已跳过DNS配置${NC}"
+        return
+    fi
     if systemctl is-active --quiet cloud-init 2>/dev/null || [[ -d /etc/cloud ]]; then
         log "${YELLOW}[WARN] 云环境检测，DNS可能被覆盖${NC}"
     fi
@@ -533,7 +572,12 @@ EOF
 
 configure_ssh() {
     log "\n${YELLOW}=============== 7. SSH配置 ===============${NC}"
-    
+
+    if ! confirm_step "SSH配置"; then
+        log "${YELLOW}[INFO] 已跳过SSH配置${NC}"
+        return
+    fi
+
     [[ -z "$NEW_SSH_PORT" ]] && [[ "$non_interactive" = false ]] && { read -p "SSH端口 (留空跳过): " -r NEW_SSH_PORT < /dev/tty; }
     
     if [[ -z "$NEW_SSH_PASSWORD" ]] && [[ "$non_interactive" = false ]]; then
@@ -572,7 +616,12 @@ configure_ssh() {
 
 configure_fail2ban() {
     log "\n${YELLOW}=============== 8. Fail2ban配置 ===============${NC}"
-    
+
+    if ! confirm_step "Fail2ban配置"; then
+        log "${YELLOW}[INFO] 已跳过Fail2ban配置${NC}"
+        return
+    fi
+
     local ports=("22")
     [[ -n "$NEW_SSH_PORT" && "$NEW_SSH_PORT" =~ ^[0-9]+$ ]] && ports+=("$NEW_SSH_PORT")
     [[ -n "$FAIL2BAN_EXTRA_PORT" && "$FAIL2BAN_EXTRA_PORT" =~ ^[0-9]+$ ]] && ports+=("$FAIL2BAN_EXTRA_PORT")
@@ -614,6 +663,10 @@ EOF
 
 system_update() {
     log "\n${YELLOW}=============== 9. 系统更新 ===============${NC}"
+    if ! confirm_step "系统更新"; then
+        log "${YELLOW}[INFO] 已跳过系统更新${NC}"
+        return
+    fi
     start_spinner "系统升级... "
     DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y -o Dpkg::Options::="--force-confold" >> "$LOG_FILE" 2>&1
     stop_spinner
